@@ -1,4 +1,5 @@
-import { CArrayType, CCharType, CIntType, CStructDefinitionField, CStructType, CType, CTypeGraph, CTypeTag } from "./struct-parser.ts";
+// deno-lint-ignore-file no-explicit-any
+import { CArrayType, CCharType, CIntType, CStructType, CType, CTypeGraph, CTypeTag } from "./struct-parser.ts";
 
 export function decodeData(typeGraph: CTypeGraph, rootType: CType, rawData: ArrayBuffer, isLE = true) {
 
@@ -8,26 +9,6 @@ export function decodeData(typeGraph: CTypeGraph, rootType: CType, rawData: Arra
             throw new Error("Unknown struct: " + JSON.stringify(name));
         return struct;
     }
-
-    // function getSize(type: CType): number {
-    //     const ret = getSizeOrg(type);
-
-    //     switch (type.tag) {
-    //         case CTypeTag.Struct:
-    //             console.log("STRUCT ", type.name, ret);
-    //             break;
-    //         case CTypeTag.Array:
-    //             console.log("ARRAY ", type.elementType.tag, ret);
-    //             break;
-    //         case CTypeTag.Int:
-    //             console.log("INT ", ret);
-    //             break;
-    //         case CTypeTag.Char:
-    //             console.log("CHAR ", ret);
-    //             break;
-    //     }
-    //     return ret;
-    // }
 
     function getSize(type: CType): number {
         switch (type.tag) {
@@ -112,6 +93,11 @@ export function decodeData(typeGraph: CTypeGraph, rootType: CType, rawData: Arra
         }
         return ret;
     }
+
+    // type DecodedStruct = Record<string, DecodedValue>;
+    // type DecodedValue = number | string | DecodedValue[] | DecodedStruct;
+    // Typescript do not allow cyclic Records! (currently)
+
 
     // Dispatch to proper function
     function decodeBuf(data: ArrayBuffer, type: CType) {
