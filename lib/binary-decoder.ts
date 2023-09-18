@@ -1,7 +1,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { CArrayType, CCharType, CIntType, CStructType, CType, CTypeGraph, CTypeTag } from "./struct-parser.ts";
 
-export function decodeData(typeGraph: CTypeGraph, rootType: CType, rawData: ArrayBuffer, isLE = true) {
+export default function decodeData(typeGraph: CTypeGraph, rootType: CType, rawData: ArrayBuffer, isLE = true) {
 
     function getStructDefinition(name: string) {
         const struct = typeGraph.structs.find(val => val.name === name);
@@ -29,7 +29,7 @@ export function decodeData(typeGraph: CTypeGraph, rootType: CType, rawData: Arra
         }
     }
 
-    function decodeInt(data: ArrayBuffer, type: CIntType): number | string {
+    function decodeInt(data: ArrayBuffer, type: CIntType): number | bigint {
         const view = new DataView(data);
         if (type.signed) {
             switch (type.length) {
@@ -40,7 +40,7 @@ export function decodeData(typeGraph: CTypeGraph, rootType: CType, rawData: Arra
                 case 4:
                     return view.getInt32(0, isLE);
                 case 8:
-                    return view.getBigInt64(0, isLE).toString();
+                    return view.getBigInt64(0, isLE);
             }
         } else {
             switch (type.length) {
@@ -51,23 +51,29 @@ export function decodeData(typeGraph: CTypeGraph, rootType: CType, rawData: Arra
                 case 4:
                     return view.getUint32(0, isLE);
                 case 8:
-                    return view.getBigUint64(0, isLE).toString();
+                    return view.getBigUint64(0, isLE);
             }
         }
 
         throw new Error("Integer length is not decodable!");
     }
 
+    function decodeNullTerminatedString(data:ArrayBuffer, isUnicode:boolean){
+        const arr = isUnicode ? new Uint16Array(data) : new Uint8Array(data);
+        const decoder = new TextDecoder(isUnicode?"utf-16" + (isLE?"le":"be") : "utf-8");
+        const idx = arr.indexOf(0);
+        const slice = arr.slice(0, idx);
+        return decoder.decode(slice);
+    }
+
     function decodeCharArray(data: ArrayBuffer, type: CArrayType): string {
         if (type.elementType.tag !== CTypeTag.Char)
             throw new Error("Expected char array");
-        const decoder = new TextDecoder(type.elementType.length === 2 ? ("utf-16" + (isLE ? "le" : "be")) : "utf-8");
-        return decoder.decode(data);
+        return decodeNullTerminatedString(data, type.elementType.length === 2);
     }
 
     function decodeChar(data: ArrayBuffer, type: CCharType): string {
-        const decoder = new TextDecoder(type.length === 2 ? ("utf-16" + (isLE ? "le" : "be")) : "utf-8");
-        return decoder.decode(data);
+        return decodeNullTerminatedString(data, type.length === 2);
     }
 
     function decodeArray(data: ArrayBuffer, type: CArrayType): any[] | string {

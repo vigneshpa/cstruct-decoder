@@ -44,7 +44,7 @@ export interface CTypeGraph {
     structs: CStructDefinition[];
 }
 
-export default function getCParser() {
+export default function parseCStructs(cFile:string) {
 
     const definitions = new Map<string, string>();
     const directiveLines: string[] = [];
@@ -303,11 +303,13 @@ export default function getCParser() {
         return data.slice(0, match.index) + "struct " + name + (rest && reduceStruct(rest));
     }
 
-    return function constructTypeGraph(data: string): CTypeGraph {
+    function constructTypeGraph(data: string): CTypeGraph {
         data = preprocess(data);
         data = reduceStruct(data);
         const globalRoot = parseStatements(data);
         const structs = [...structStore.entries()].map(val => parseStruct(...val));
         return { globalRoot, structs };
     }
+    
+    return constructTypeGraph(cFile);
 }

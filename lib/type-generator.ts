@@ -12,6 +12,8 @@ export default function generateTypes(typeGraph: CTypeGraph){
             case CTypeTag.Struct:
                 return type.name;
             case CTypeTag.Int:
+                if(type.length > 4)
+                    return "bigint";
                 return "number";
             case CTypeTag.Char:
                 return "string";

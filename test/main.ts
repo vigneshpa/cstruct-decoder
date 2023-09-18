@@ -1,13 +1,12 @@
-import { decodeData } from "../lib/binary-decoder.ts";
-import getCParser, { CStructType, CTypeTag } from "../lib/struct-parser.ts";
+import decodeData from "../lib/binary-decoder.ts";
+import parseCStructs, { CStructType, CTypeTag } from "../lib/struct-parser.ts";
 import generateTypes from "../lib/type-generator.ts";
 
 if (import.meta.main) {
   const f = "./schema";
   const src = await Deno.readTextFile(new URL(f + ".h", import.meta.url));
 
-  const parse = getCParser();
-  const typeGraph = parse(src);
+  const typeGraph = parseCStructs(src);
 
   await Deno.writeTextFile(
     new URL(f + ".graph.json", import.meta.url),
@@ -26,7 +25,7 @@ if (import.meta.main) {
   const parsed = decodeData(typeGraph, root, data.buffer, true);
 
   await Deno.writeTextFile(
-    new URL(f + ".data.json", import.meta.url),
+    new URL(f + ".json", import.meta.url),
     JSON.stringify(parsed, null, 4),
   );
 }
