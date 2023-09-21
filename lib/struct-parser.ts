@@ -44,7 +44,7 @@ export interface CTypeGraph {
     structs: CStructDefinition[];
 }
 
-export default function parseCStructs(cFile:string) {
+export default function parseCStructs(cFile: string) {
 
     const definitions = new Map<string, string>();
     const directiveLines: string[] = [];
@@ -57,7 +57,7 @@ export default function parseCStructs(cFile:string) {
         const key = line.slice(0, whitespace?.index);
         const val = line.slice((whitespace?.index ?? 0) + (whitespace?.length ?? 0));
         const constLine = `const ${key} = ${val};\n`;
-        definitions.set(key, val);
+        definitions.set(key.trim(), val.trim());
         return constLine;
     }
 
@@ -74,14 +74,9 @@ export default function parseCStructs(cFile:string) {
         return "// unknown_directive:" + line + "\n";
     }
 
-    function removeComments(line: string) {
-        const idx = line.indexOf("//");
-        if (idx !== -1)
-            line = line.slice(0, idx);
-
-        line = line.replace(/\/\*.*\*\//g, "")
-
-        return line;
+    function removeComments(data: string) {
+        data = data.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, "")
+        return data;
     }
 
     function applyDefinitions(line: string) {
@@ -92,6 +87,7 @@ export default function parseCStructs(cFile:string) {
     }
 
     function preprocess(data: string): string {
+        data = removeComments(data);
         const out: string[] = [];
         const lines = data.split(/\n/g);
         for (let line of lines) {
@@ -99,7 +95,6 @@ export default function parseCStructs(cFile:string) {
                 directiveLines.push(preprocessLine(line));
                 continue;
             }
-            line = removeComments(line);
             line = line.trim();
             if (line)
                 out.push(line);
@@ -155,7 +150,7 @@ export default function parseCStructs(cFile:string) {
     }
 
     function parseArray(fir: FieldIR): CArrayType | null {
-        const match = /\[([0-9]+)\]$/.exec(fir.name);
+        const match = /\[\s*([0-9]+)\s*\]$/.exec(fir.name);
         if (!match)
             return null;
 
@@ -222,13 +217,13 @@ export default function parseCStructs(cFile:string) {
     function parseFieldLine(line: string) {
 
         line = line.replace(/struct\s+/g, "struct$").trim();
-        const match = /([^\s]+)$/.exec(line);
+        const match = /^([^\s]+)/.exec(line);
         if (!match)
             throw new Error("No field name");
 
         const fir: FieldIR = {
-            ftype: line.slice(0, match.index).trim(),
-            name: match[1],
+            name: line.slice(match[0].length).trim(),
+            ftype: match[1],
         };
 
         if (!fir.ftype || !fir.name)
@@ -310,6 +305,6 @@ export default function parseCStructs(cFile:string) {
         const structs = [...structStore.entries()].map(val => parseStruct(...val));
         return { globalRoot, structs };
     }
-    
+
     return constructTypeGraph(cFile);
 }
