@@ -1,4 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
+import type { BufReader } from "https://deno.land/std@0.201.0/io/buf_reader.ts";
 import { CArrayType, CCharType, CIntType, CStructType, CType, CTypeGraph, CTypeTag } from "./struct-parser.ts";
 
 export function getTypeSize(graph: CTypeGraph, type: CType): number {
@@ -27,7 +28,7 @@ function getStructDefinition(graph: CTypeGraph, name: string) {
     return struct;
 }
 
-export function decodeData(graph: CTypeGraph, rootType: CType, rawData: ArrayBuffer, isLE = true) {
+export function decodeData(graph: CTypeGraph, rootType: CType, rawData: Uint8Array, isLE = true) {
 
 
     function getSize(type: CType): number {
@@ -83,7 +84,20 @@ export function decodeData(graph: CTypeGraph, rootType: CType, rawData: ArrayBuf
         return decodeNullTerminatedString(data, type.length === 2);
     }
 
-    function decodeArray(data: DataView, type: CArrayType): any[] | string {
+    function isUint8(type:CType){
+        return type.tag === CTypeTag.Int && type.length === 1 && !type.signed;
+    }
+
+    function decodeUint8Array(data: DataView, type: CArrayType): Uint8Array {
+        if (!isUint8(type.elementType))
+            throw new Error("Expected uint8_t array");
+        // slicing the buffer to make a new copy
+        return new Uint8Array(data.buffer.slice(data.byteOffset, data.byteLength + data.byteLength));
+    }
+
+    function decodeArray(data: DataView, type: CArrayType): any[] | string | Uint8Array {
+        if (isUint8(type.elementType))
+            return decodeUint8Array(data, type);
         if (type.elementType.tag === CTypeTag.Char)
             return decodeCharArray(data, type);
         const ret = [];
@@ -115,8 +129,6 @@ export function decodeData(graph: CTypeGraph, rootType: CType, rawData: ArrayBuf
 
     // Dispatch to proper function
     function decodeBuf(data: DataView, type: CType) {
-        if (getSize(type) !== data.byteLength)
-            throw new Error("Type size does not match with the given buffer size: " + getSize(type) + " and " + data.byteLength);
 
         switch (type.tag) {
             case CTypeTag.Array:
@@ -130,12 +142,32 @@ export function decodeData(graph: CTypeGraph, rootType: CType, rawData: ArrayBuf
         }
     }
 
-    return decodeBuf(new DataView(rawData), rootType);
+    if (getSize(rootType) !== rawData.byteLength) {
+        console.warn("Warning: Type size does not match with the given buffer size: ", getSize(rootType), " and ", rawData.byteLength);
+        rawData = rawData.slice(0, getSize(rootType));
+    }
+
+
+    return decodeBuf(new DataView(rawData.buffer, rawData.byteOffset, rawData.byteLength), rootType);
 }
 
 export function getStructReader<GeneratedTypeMap extends Record<string, any>>(graph: CTypeGraph) {
 
-    return async function readStruct<T extends Extract<keyof GeneratedTypeMap, string>>(reader: ReadableStreamBYOBReader, name: T): Promise<GeneratedTypeMap[T]> {
+    function size<T extends Extract<keyof GeneratedTypeMap, string>>(name: T) {
+        const rootType: CStructType = {
+            tag: CTypeTag.Struct,
+            name
+        };
+        return getTypeSize(graph, rootType);
+    }
+    function decode<T extends Extract<keyof GeneratedTypeMap, string>>(data: Uint8Array, name: T): GeneratedTypeMap[T] {
+        const rootType: CStructType = {
+            tag: CTypeTag.Struct,
+            name
+        };
+        return decodeData(graph, rootType, data) as any;
+    }
+    async function read<T extends Extract<keyof GeneratedTypeMap, string>>(reader: BufReader, name: T): Promise<GeneratedTypeMap[T]> {
         const rootType: CStructType = {
             tag: CTypeTag.Struct,
             name
@@ -143,10 +175,14 @@ export function getStructReader<GeneratedTypeMap extends Record<string, any>>(gr
         const size = getTypeSize(graph, rootType);
         const buf = new Uint8Array(size);
         // It is past perfect (read it as "red") :)
-        const read = await reader.read(buf);
-        if (read.value?.byteLength !== size)
-            throw new Error("Cannot read struct" + JSON.stringify(name));
-        const data = decodeData(graph, rootType, read.value.buffer) as any;
-        return data;
+        const read = await reader.readFull(buf);
+        if (!read)
+            throw new Error("Cannot read struct: " + JSON.stringify(name));
+        return decode(read, name);
+    }
+    return {
+        size,
+        decode,
+        read,
     }
 }
