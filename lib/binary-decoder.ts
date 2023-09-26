@@ -21,7 +21,7 @@ export function getTypeSize(graph: CTypeGraph, type: CType): number {
     }
 }
 
-function getStructDefinition(graph: CTypeGraph, name: string) {
+export function getStructDefinition(graph: CTypeGraph, name: string) {
     const struct = graph.structs.find(val => val.name === name);
     if (!struct)
         throw new Error("Unknown struct: " + JSON.stringify(name));
@@ -167,22 +167,29 @@ export function getStructReader<GeneratedTypeMap extends Record<string, any>>(gr
         };
         return decodeData(graph, rootType, data) as any;
     }
+
+    let buf: Uint8Array|null = null;
     async function read<T extends Extract<keyof GeneratedTypeMap, string>>(reader: BufReader, name: T): Promise<GeneratedTypeMap[T]> {
         const rootType: CStructType = {
             tag: CTypeTag.Struct,
             name
         };
         const size = getTypeSize(graph, rootType);
-        const buf = new Uint8Array(size);
+        buf = new Uint8Array(size);
         // It is past perfect (read it as "red") :)
         const read = await reader.readFull(buf);
         if (!read)
             throw new Error("Cannot read struct: " + JSON.stringify(name));
         return decode(read, name);
     }
+    
+    function getPreviousBuffer(){
+        return buf;
+    }
     return {
         size,
         decode,
         read,
+        getPreviousBuffer
     }
 }
