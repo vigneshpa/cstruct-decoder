@@ -84,7 +84,7 @@ export function decodeData(graph: CTypeGraph, rootType: CType, rawData: Uint8Arr
         return decodeNullTerminatedString(data, type.length === 2);
     }
 
-    function isUint8(type:CType){
+    function isUint8(type: CType) {
         return type.tag === CTypeTag.Int && type.length === 1 && !type.signed;
     }
 
@@ -151,6 +151,8 @@ export function decodeData(graph: CTypeGraph, rootType: CType, rawData: Uint8Arr
     return decodeBuf(new DataView(rawData.buffer, rawData.byteOffset, rawData.byteLength), rootType);
 }
 
+const SourceBuffer = Symbol("SourceBuffer");
+
 export function getStructReader<GeneratedTypeMap extends Record<string, any>>(graph: CTypeGraph) {
 
     function size<T extends Extract<keyof GeneratedTypeMap, string>>(name: T) {
@@ -168,28 +170,31 @@ export function getStructReader<GeneratedTypeMap extends Record<string, any>>(gr
         return decodeData(graph, rootType, data) as any;
     }
 
-    let buf: Uint8Array|null = null;
-    async function read<T extends Extract<keyof GeneratedTypeMap, string>>(reader: BufReader, name: T): Promise<GeneratedTypeMap[T]> {
+    async function read<T extends Extract<keyof GeneratedTypeMap, string>>(reader: BufReader, name: T, includeSourceBuffer = true): Promise<GeneratedTypeMap[T]> {
         const rootType: CStructType = {
             tag: CTypeTag.Struct,
             name
         };
         const size = getTypeSize(graph, rootType);
-        buf = new Uint8Array(size);
+        const buf = new Uint8Array(size);
         // It is past perfect (read it as "red") :)
         const read = await reader.readFull(buf);
         if (!read)
             throw new Error("Cannot read struct: " + JSON.stringify(name));
-        return decode(read, name);
+        const data =  decode(read, name);
+        if(includeSourceBuffer)
+            data[SourceBuffer] = buf.slice(0);
+        return data;
     }
-    
-    function getPreviousBuffer(){
-        return buf;
+
+    function getSourceBuffer<T extends Extract<keyof GeneratedTypeMap, string>>(data:GeneratedTypeMap[T]){
+        return data[SourceBuffer] as Uint8Array;
     }
+
     return {
         size,
         decode,
         read,
-        getPreviousBuffer
+        getSourceBuffer
     }
 }
