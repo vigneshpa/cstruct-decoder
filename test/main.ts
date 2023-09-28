@@ -22,7 +22,7 @@ if (import.meta.main) {
   await Deno.writeTextFile(new URL(f + ".d.ts", import.meta.url), typeDefs);
 
   const data = await Deno.readFile(new URL(f + ".bin", import.meta.url));
-  const parsed = decodeData(typeGraph, root, data.buffer, true);
+  const parsed = decodeData(typeGraph, root, data, true);
 
   // deno-lint-ignore no-explicit-any
   const bigintReplacer = (_key:string, value:any)=>(typeof value === "bigint" ? value.toString(): value);
