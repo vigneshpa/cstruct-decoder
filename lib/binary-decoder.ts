@@ -1,6 +1,10 @@
 // deno-lint-ignore-file no-explicit-any
-import type { BufReader } from "https://deno.land/std@0.201.0/io/buf_reader.ts";
 import { CArrayType, CCharType, CIntType, CStructType, CType, CTypeGraph, CTypeTag } from "./struct-parser.ts";
+
+interface BufReader {
+    read(p: Uint8Array): Promise<number | null>;
+    readFull(p: Uint8Array): Promise<Uint8Array | null>;
+}
 
 export function getTypeSize(graph: CTypeGraph, type: CType): number {
     switch (type.tag) {
@@ -28,7 +32,7 @@ export function getStructDefinition(graph: CTypeGraph, name: string) {
     return struct;
 }
 
-export function decodeData(graph: CTypeGraph, rootType: CType, rawData: Uint8Array, isLE = true) {
+export function decodeData(graph: CTypeGraph, rootType: CType, rawData: ArrayBufferView, isLE = true) {
 
 
     function getSize(type: CType): number {
@@ -142,10 +146,8 @@ export function decodeData(graph: CTypeGraph, rootType: CType, rawData: Uint8Arr
         }
     }
 
-    if (getSize(rootType) !== rawData.byteLength) {
-        console.warn("Warning: Type size does not match with the given buffer size: ", getSize(rootType), " and ", rawData.byteLength);
-        rawData = rawData.slice(0, getSize(rootType));
-    }
+    if (getSize(rootType) !== rawData.byteLength)
+        throw new Error("Warning: Type size does not match with the given buffer size: " + getSize(rootType) + " and " + rawData.byteLength);
 
 
     return decodeBuf(new DataView(rawData.buffer, rawData.byteOffset, rawData.byteLength), rootType);
@@ -153,8 +155,18 @@ export function decodeData(graph: CTypeGraph, rootType: CType, rawData: Uint8Arr
 
 const SourceBuffer = Symbol("SourceBuffer");
 
+/**
+ * Get the struct reader function as an object
+ * @param graph The generated CTypeGraph
+ * @returns all the reader functions grouped by an object literal
+ */
 export function getStructReader<GeneratedTypeMap extends Record<string, any>>(graph: CTypeGraph) {
 
+    /**
+     * Calculates the size of a struct
+     * @param name Name of the struct
+     * @returns The size of the struct
+     */
     function size<T extends Extract<keyof GeneratedTypeMap, string>>(name: T) {
         const rootType: CStructType = {
             tag: CTypeTag.Struct,
@@ -162,7 +174,14 @@ export function getStructReader<GeneratedTypeMap extends Record<string, any>>(gr
         };
         return getTypeSize(graph, rootType);
     }
-    function decode<T extends Extract<keyof GeneratedTypeMap, string>>(data: Uint8Array, name: T): GeneratedTypeMap[T] {
+
+    /**
+     * 
+     * @param data Any ArrayBufferView to decode the struct from
+     * @param name Name of the struct
+     * @returns The struct as a JS object literal
+     */
+    function decode<T extends Extract<keyof GeneratedTypeMap, string>>(data: ArrayBufferView, name: T): GeneratedTypeMap[T] {
         const rootType: CStructType = {
             tag: CTypeTag.Struct,
             name
@@ -170,6 +189,13 @@ export function getStructReader<GeneratedTypeMap extends Record<string, any>>(gr
         return decodeData(graph, rootType, data) as any;
     }
 
+    /**
+     * Reads a struct from the given BufReader
+     * @param reader A buffered reader instance
+     * @param name Name of the struct
+     * @param includeSourceBuffer Weather to include the read struct buffer
+     * @returns The struct as a JS object literal
+     */
     async function read<T extends Extract<keyof GeneratedTypeMap, string>>(reader: BufReader, name: T, includeSourceBuffer = true): Promise<GeneratedTypeMap[T]> {
         const rootType: CStructType = {
             tag: CTypeTag.Struct,
@@ -181,13 +207,18 @@ export function getStructReader<GeneratedTypeMap extends Record<string, any>>(gr
         const read = await reader.readFull(buf);
         if (!read)
             throw new Error("Cannot read struct: " + JSON.stringify(name));
-        const data =  decode(read, name);
-        if(includeSourceBuffer)
-            data[SourceBuffer] = buf.slice(0);
+        const data = decode(read, name);
+        if (includeSourceBuffer)
+            data[SourceBuffer] = buf;
         return data;
     }
 
-    function getSourceBuffer<T extends Extract<keyof GeneratedTypeMap, string>>(data:GeneratedTypeMap[T]){
+    /**
+     * 
+     * @param data The struct js object
+     * @returns The actual read buffer used to decode the struct
+     */
+    function getSourceBuffer<T extends Extract<keyof GeneratedTypeMap, string>>(data: GeneratedTypeMap[T]) {
         return data[SourceBuffer] as Uint8Array;
     }
 

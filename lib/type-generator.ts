@@ -4,6 +4,11 @@ function isUint8(type:CType){
     return type.tag === CTypeTag.Int && type.length === 1 && !type.signed;
 }
 
+/**
+ * Generate TypeScript definitions form the given CTypeGraph
+ * @param typeGraph The CTypeGraph
+ * @returns The contents of the generated TypeScript file
+ */
 export default function generateTypes(typeGraph: CTypeGraph) {
     let ret = "";
 

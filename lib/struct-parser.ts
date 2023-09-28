@@ -44,6 +44,11 @@ export interface CTypeGraph {
     structs: CStructDefinition[];
 }
 
+/**
+ * Parses the given C source and constructs a CTypeGraph
+ * @param cFile The contents of the C source file
+ * @returns The typegraph of the source file
+ */
 export default function parseCStructs(cFile: string) {
 
     const definitions = new Map<string, string>();
